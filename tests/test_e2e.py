@@ -10,6 +10,7 @@ PAGES = (
     ("/attribution", 'data-page="attribution"'),
     ("/confidence", 'data-page="confidence"'),
     ("/budgets", 'data-page="budgets"'),
+    ("/refunds", 'data-page="refunds"'),
     ("/export", 'data-page="export"'),
 )
 

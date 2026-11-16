@@ -36,12 +36,14 @@ def export_json(store, run_id: str | None) -> dict:
     stats = run["stats"]
     model = "time_decay"
     credits = store.credits(run["run_id"], model)
+    from ..m8_refunds import service as m8_service
+    refunds = m8_service.carry_forward(store, run["run_id"], model)
     return json_out.bundle(
         run, stats.get("accounts", {}),
         {code: int(value.get("gmv_cents", 0))
          for code, value in store.model_totals(run["run_id"]).items()},
         stats.get("spend", {}), store.touchpoints(run["run_id"]),
-        store.orders(run["run_id"]), credits)
+        store.orders(run["run_id"]), credits, refunds)
 
 
 def manifest(store, run_id: str | None, settings) -> dict:

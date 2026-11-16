@@ -46,8 +46,30 @@ CREATE TABLE IF NOT EXISTS logs (
   run_id TEXT, seq INTEGER, ts TEXT, level TEXT, message TEXT,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS refund_batches (
+  run_id TEXT, batch_id TEXT, status TEXT, source TEXT,
+  total_rows INTEGER, processed_rows INTEGER, applied_rows INTEGER,
+  quarantined_rows INTEGER, refund_cents INTEGER,
+  payload TEXT, created_at TEXT, updated_at TEXT, error TEXT,
+  content_digest TEXT,
+  PRIMARY KEY (run_id, batch_id)
+);
+CREATE TABLE IF NOT EXISTS refund_rows (
+  run_id TEXT, batch_id TEXT, row_no INTEGER, raw_line INTEGER,
+  refund_id TEXT, order_id TEXT, refund_cents INTEGER,
+  refund_time_utc TEXT, status TEXT, reason TEXT, applied INTEGER,
+  content_digest TEXT,
+  PRIMARY KEY (run_id, batch_id, row_no)
+);
+CREATE TABLE IF NOT EXISTS refund_allocations (
+  run_id TEXT, batch_id TEXT, refund_id TEXT, model TEXT,
+  order_id TEXT, touch_id TEXT, channel TEXT, cents INTEGER, position INTEGER,
+  PRIMARY KEY (run_id, batch_id, refund_id, model, touch_id, position)
+);
 CREATE INDEX IF NOT EXISTS idx_tp_run ON touchpoints(run_id, status);
 CREATE INDEX IF NOT EXISTS idx_cr_run ON credits(run_id, model, channel);
+CREATE INDEX IF NOT EXISTS idx_rf_batch ON refund_rows(run_id, batch_id, status);
+CREATE INDEX IF NOT EXISTS idx_rf_alloc ON refund_allocations(run_id, model, channel);
 """
 
 
@@ -246,6 +268,119 @@ class Store:
         with self.tx() as conn:
             return conn.execute("SELECT COALESCE(MAX(seq),0) FROM logs WHERE run_id=?",
                                 (run_id,)).fetchone()[0]
+
+    # ---- 退款批次 ----
+    def get_refund_batch(self, run_id: str, batch_id: str) -> dict | None:
+        with self.tx() as conn:
+            row = conn.execute(
+                "SELECT * FROM refund_batches WHERE run_id=? AND batch_id=?",
+                (run_id, batch_id)).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["payload"] = json.loads(row["payload"]) if row["payload"] else {}
+        return result
+
+    def list_refund_batches(self, run_id: str) -> list[dict]:
+        with self.tx() as conn:
+            rows = conn.execute(
+                "SELECT * FROM refund_batches WHERE run_id=?"
+                " ORDER BY created_at DESC, batch_id DESC", (run_id,)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(row["payload"]) if row["payload"] else {}
+            result.append(item)
+        return result
+
+    def save_refund_batch(self, run_id: str, batch: dict) -> None:
+        with self.tx() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO refund_batches(run_id, batch_id, status, source,"
+                " total_rows, processed_rows, applied_rows, quarantined_rows,"
+                " refund_cents, payload, created_at, updated_at, error, content_digest)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, batch["batch_id"], batch["status"], batch.get("source"),
+                 int(batch.get("total_rows", 0)), int(batch.get("processed_rows", 0)),
+                 int(batch.get("applied_rows", 0)), int(batch.get("quarantined_rows", 0)),
+                 int(batch.get("refund_cents", 0)),
+                 json.dumps(batch.get("payload", {}), ensure_ascii=False),
+                 batch["created_at"], batch["updated_at"], batch.get("error"),
+                 batch.get("content_digest")))
+
+    def upsert_refund_row(self, run_id: str, batch_id: str, row: dict) -> None:
+        with self.tx() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO refund_rows(run_id, batch_id, row_no, raw_line,"
+                " refund_id, order_id, refund_cents, refund_time_utc, status, reason,"
+                " applied, content_digest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, batch_id, int(row["row_no"]), int(row.get("raw_line", 0)),
+                 row.get("refund_id"), row.get("order_id"),
+                 int(row.get("refund_cents") or 0), row.get("refund_time_utc"),
+                 row["status"], row.get("reason"), int(bool(row.get("applied"))),
+                 row.get("content_digest")))
+
+    def refund_rows(self, run_id: str, batch_id: str | None = None,
+                    status: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM refund_rows WHERE run_id=?"
+        params: list = [run_id]
+        if batch_id:
+            sql += " AND batch_id=?"
+            params.append(batch_id)
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+        sql += " ORDER BY batch_id, row_no"
+        with self.tx() as conn:
+            return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+    def applied_refund_total_by_order(self, run_id: str,
+                                      exclude_batch: str | None = None) -> dict:
+        """已成功应用的退款按订单汇总（分）；断点续跑时排除当前批次自身。"""
+        sql = ("SELECT order_id, COALESCE(SUM(refund_cents),0) AS cents FROM refund_rows"
+               " WHERE run_id=? AND applied=1")
+        params: list = [run_id]
+        if exclude_batch:
+            sql += " AND batch_id<>?"
+            params.append(exclude_batch)
+        sql += " GROUP BY order_id"
+        with self.tx() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return {row["order_id"]: int(row["cents"]) for row in rows}
+
+    def replace_refund_allocations(self, run_id: str, batch_id: str,
+                                   allocations: list[dict]) -> None:
+        with self.tx() as conn:
+            conn.execute(
+                "DELETE FROM refund_allocations WHERE run_id=? AND batch_id=?",
+                (run_id, batch_id))
+            conn.executemany(
+                "INSERT INTO refund_allocations(run_id, batch_id, refund_id, model,"
+                " order_id, touch_id, channel, cents, position)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                [(run_id, batch_id, item["refund_id"], item["model"], item["order_id"],
+                  item["touch_id"], item["channel"], int(item["cents"]),
+                  int(item["position"])) for item in allocations])
+
+    def refund_allocations(self, run_id: str, model: str,
+                           batch_id: str | None = None) -> list[dict]:
+        sql = "SELECT * FROM refund_allocations WHERE run_id=? AND model=?"
+        params: list = [run_id, model]
+        if batch_id:
+            sql += " AND batch_id=?"
+            params.append(batch_id)
+        sql += " ORDER BY batch_id, refund_id, position"
+        with self.tx() as conn:
+            return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+    def refund_channel_totals(self, run_id: str, model: str) -> list[dict]:
+        with self.tx() as conn:
+            rows = conn.execute(
+                "SELECT channel, COALESCE(SUM(cents),0) AS cents, COUNT(*) AS n"
+                " FROM refund_allocations WHERE run_id=? AND model=?"
+                " GROUP BY channel ORDER BY cents DESC, channel",
+                (run_id, model)).fetchall()
+        return [dict(row) for row in rows]
 
 
 def _run_row(row) -> dict:

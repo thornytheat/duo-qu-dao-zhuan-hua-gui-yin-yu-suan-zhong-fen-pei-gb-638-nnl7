@@ -40,6 +40,13 @@ _RAW = (
     ("CI_INTERVAL_OVERLAP", 250, "前两渠道区间重叠", "confidence"),
     ("CI_BUDGET_MISMATCH", 260, "预算首位与份额首位不一致", "confidence"),
     ("CI_SAME_SECOND_TIE", 270, "同秒触点按编号定序", "confidence"),
+    ("RF_ROW_DUP_IDENTICAL", 310, "同批次退款行编号重复且内容相同", "refund"),
+    ("RF_ROW_DUP_CONFLICT", 320, "同批次退款行编号重复且字段冲突", "refund"),
+    ("RF_ORDER_UNKNOWN", 330, "退款引用的订单不存在", "refund"),
+    ("RF_ORDER_INVALID", 340, "退款引用的订单未通过质检", "refund"),
+    ("RF_AMOUNT_INVALID", 350, "退款金额无法解析或非正", "refund"),
+    ("RF_OVER_REFUND", 360, "累计退款超过订单成交额", "refund"),
+    ("RF_TIME_UNPARSABLE", 370, "退款时间无法解析", "refund"),
     ("OUT_OF_WINDOW", 900, "不在归因窗口内", "window"),
 )
 

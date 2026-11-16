@@ -21,10 +21,12 @@ from .modules.m5_budgets import service as m5_service
 from .modules.m6_export import handler as m6_handler
 from .modules.m7_confidence import handler as m7_handler
 from .modules.m7_confidence import service as m7_service
+from .modules.m8_refunds import handler as m8_handler
+from .modules.m8_refunds import service as m8_service
 from .store import Store
 
 MODULES = (m1_handler, m2_handler, m3_handler, m4_handler, m5_handler, m6_handler,
-           m7_handler)
+           m7_handler, m8_handler)
 
 
 def create_app(settings: config.Settings | None = None) -> FastAPI:
@@ -172,6 +174,26 @@ def create_app(settings: config.Settings | None = None) -> FastAPI:
         return web.render(request, "confidence.html", active="confidence",
                           result=result, form=form, error=error,
                           models=m4_models.MODELS)
+
+    @app.get("/refunds")
+    def page_refunds(request: Request):
+        query = request.query_params
+        model = query.get("model") or "time_decay"
+        if model not in m4_models.MODEL_CODES:
+            model = "time_decay"
+        run = app.state.ctx.current_run()
+        if run is None:
+            return web.render(request, "refunds.html", active="refunds",
+                              batches=[], view=None, model=model,
+                              models=m4_models.MODELS, refund_files=[])
+        refund_files = sorted(
+            path.name for path in (settings.sample_dir / "refunds").glob("*.csv"))
+        view = m8_service.carry_forward(store, run["run_id"], model)
+        return web.render(request, "refunds.html", active="refunds", run=run,
+                          model=model, models=m4_models.MODELS, view=view,
+                          batches=store.list_refund_batches(run["run_id"]),
+                          refund_files=refund_files,
+                          refund_rows=store.refund_rows(run["run_id"])[:250])
 
     @app.get("/export")
     def page_export(request: Request):

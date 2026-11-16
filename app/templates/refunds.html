@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}退款结转{% endblock %}
+{% block heading %}退款结转{% endblock %}
+{% block content %}
+{% if not run %}
+<section class="section"><div class="empty">还没有运行记录，先在作业总览导入样例。</div></section>
+{% else %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">提交退款批次</span>
+    <span class="section__sub">同批次号重试不重复冲减 · 中断可续跑 · 历史花费与预算版本不改写</span>
+  </div>
+  <form id="refund-form" class="toolbar" autocomplete="off">
+    <div class="field">
+      <label for="refund-batch">批次号</label>
+      <input id="refund-batch" name="batch_id" type="text" required placeholder="RF-202611-01">
+    </div>
+    <div class="field">
+      <label for="refund-source">退款文件</label>
+      <select id="refund-source" name="source">
+        {% for name in refund_files %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn btn--primary" type="submit">提交 / 续跑</button>
+    <span class="toolbar__spacer"></span>
+    <a class="btn" href="/api/refunds/allocations.csv?model={{ model }}">导出冲减份额 CSV</a>
+  </form>
+</section>
+
+{% if view %}
+<section class="section">
+  <div class="strip">
+    <div class="meter"><div class="meter__label">原成交额</div><div class="meter__value">{{ view.totals.gmv_cents|money }}<span class="meter__unit">元</span></div></div>
+    <div class="meter"><div class="meter__label">退款冲减</div><div class="meter__value">{{ view.totals.refund_cents|money }}<span class="meter__unit">元</span></div></div>
+    <div class="meter"><div class="meter__label">订单净额</div><div class="meter__value">{{ view.totals.net_cents|money }}<span class="meter__unit">元</span></div></div>
+    <div class="meter"><div class="meter__label">渠道花费</div><div class="meter__value">{{ view.totals.spend_cents|money }}<span class="meter__unit">元</span></div></div>
+    <div class="meter"><div class="meter__label">对账</div><div class="meter__value">{% if view.reconcile.all_balanced %}<span class="dot dot--ok"></span>四平{% else %}<span class="dot dot--bad"></span>不平{% endif %}</div></div>
+  </div>
+  <form class="toolbar" method="get" action="/refunds" autocomplete="off">
+    <div class="field">
+      <label for="rf-model">归因模型</label>
+      <select id="rf-model" name="model">
+        {% for code, label in models %}
+        <option value="{{ code }}"{% if code == model %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn--primary" type="submit">切换视图</button>
+  </form>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">渠道结转与调整 ROI</span>
+    <span class="section__sub">原 ROI 按原单计算 · 调整 ROI 按净额，仅作用于下一版预算建议</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>渠道</th><th class="num" data-sort="num">成交额(元)</th><th class="num" data-sort="num">退款(元)</th><th class="num" data-sort="num">净额(元)</th><th class="num" data-sort="num">花费(元)</th><th class="num" data-sort="num">原 ROI</th><th class="num" data-sort="num">调整 ROI</th></tr></thead>
+      <tbody>
+        {% for row in view.channels %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td class="num">{{ row.gmv_cents|money }}</td>
+          <td class="num">{{ row.refund_cents|money }}</td>
+          <td class="num">{{ row.net_cents|money }}</td>
+          <td class="num">{{ row.spend_cents|money }}</td>
+          <td class="num">{{ row.roi|ratio if row.roi is not none else "—" }}</td>
+          <td class="num"><b>{{ row.adjusted_roi|ratio if row.adjusted_roi is not none else "—" }}</b></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">四账对平</span>
+    <span class="section__sub">单位：分</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t">
+      <thead><tr><th>账目</th><th class="num">左</th><th class="num">右</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>退款：批次行合计 = 份额拆分合计</td><td class="num">{{ view.reconcile.refund_row_cents }}</td><td class="num">{{ view.reconcile.refund_alloc_cents }}</td><td>{% if view.reconcile.refund_balanced %}<span class="dot dot--ok"></span>平{% else %}<span class="dot dot--bad"></span>差 {{ view.reconcile.refund_row_cents - view.reconcile.refund_alloc_cents }}{% endif %}</td></tr>
+        <tr><td>订单净额：成交额 − 订单退款 = 渠道净额</td><td class="num">{{ view.reconcile.order_gmv_cents - view.reconcile.order_refund_cents }}</td><td class="num">{{ view.reconcile.channel_net_cents }}</td><td>{% if view.reconcile.net_balanced %}<span class="dot dot--ok"></span>平{% else %}<span class="dot dot--bad"></span>不平{% endif %}</td></tr>
+        <tr><td>渠道花费：运行快照 = 证据行汇总（退款不改写）</td><td class="num">{{ view.reconcile.spend_snapshot_cents }}</td><td class="num">{{ view.reconcile.spend_live_cents }}</td><td>{% if view.reconcile.spend_balanced %}<span class="dot dot--ok"></span>平{% else %}<span class="dot dot--bad"></span>不平{% endif %}</td></tr>
+        <tr><td>预算余额：最新已审批版本分完即 0</td><td class="num">v{{ view.reconcile.budget_version or "—" }}</td><td class="num">{{ view.reconcile.budget_balance_cents }}</td><td>{% if view.reconcile.budget_balanced %}<span class="dot dot--ok"></span>平{% else %}<span class="dot dot--bad"></span>不平{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">退款批次</span>
+    <span class="section__sub">{{ batches|length }} 个</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>批次号</th><th>状态</th><th class="num" data-sort="num">总行</th><th class="num" data-sort="num">已冲减</th><th class="num" data-sort="num">隔离</th><th class="num" data-sort="num">退款(分)</th><th>来源</th><th>更新</th><th>错误</th></tr></thead>
+      <tbody>
+        {% for item in batches %}
+        <tr>
+          <td class="mono">{{ item.batch_id }}</td>
+          <td>{{ item.status }}</td>
+          <td class="num">{{ item.total_rows }}</td>
+          <td class="num">{{ item.applied_rows }}</td>
+          <td class="num">{{ item.quarantined_rows }}</td>
+          <td class="num">{{ item.refund_cents }}</td>
+          <td class="muted">{{ item.source }}</td>
+          <td class="mono">{{ item.updated_at|local }}</td>
+          <td class="muted">{{ item.error or "" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not batches %}
+        <tr><td colspan="9" class="muted">还没有退款批次。</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">退款逐行</span>
+    <span class="section__sub">最多 250 行 · 原因码见数据字典</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th class="num">行</th><th>退款单号</th><th>订单号</th><th class="num" data-sort="num">退款(分)</th><th>状态</th><th>原因码</th><th>含义</th></tr></thead>
+      <tbody>
+        {% for row in refund_rows %}
+        <tr>
+          <td class="num">{{ row.row_no }}</td>
+          <td class="mono">{{ row.refund_id }}</td>
+          <td class="mono">{{ row.order_id }}</td>
+          <td class="num">{{ row.refund_cents }}</td>
+          <td>{{ row.status }}</td>
+          <td class="mono">{{ row.reason or "" }}</td>
+          <td class="muted">{{ row.reason|reason if row.reason else "" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not refund_rows %}
+        <tr><td colspan="7" class="muted">还没有退款行。</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

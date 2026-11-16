@@ -53,6 +53,10 @@
           <option value="first">首次触点</option>
         </select>
       </div>
+      <div class="field">
+        <label for="budget-net">ROI 口径</label>
+        <label class="check"><input id="budget-net" name="use_refund_net" type="checkbox"> 按退款净额</label>
+      </div>
       <button class="btn btn--primary" type="submit">提交</button>
     </form>
     {% if latest %}
@@ -85,19 +89,20 @@
   </div>
   <div class="table-wrap">
     <table class="t" data-sortable>
-      <thead><tr><th class="num" data-sort="num">版本</th><th class="num" data-sort="num">总额(元)</th><th>模型</th><th class="num" data-sort="num">差额(分)</th><th>生成</th></tr></thead>
+      <thead><tr><th class="num" data-sort="num">版本</th><th class="num" data-sort="num">总额(元)</th><th>模型</th><th>ROI 口径</th><th class="num" data-sort="num">差额(分)</th><th>生成</th></tr></thead>
       <tbody>
         {% for item in budgets %}
         <tr>
           <td class="num">v{{ item.plan_version }}</td>
           <td class="num">{{ item.total_cents|money }}</td>
           <td class="muted">{{ item.payload.model }}</td>
+          <td class="muted">{{ "退款净额" if item.payload.roi_basis == "refund_net" else "原成交额" }}</td>
           <td class="num">{{ 0 if item.payload.balanced else item.total_cents - (item.payload.rows|sum(attribute='spend_new_cents')) }}</td>
           <td class="mono">{{ item.created_at|local }}</td>
         </tr>
         {% endfor %}
         {% if not budgets %}
-        <tr><td colspan="5" class="muted">还没有方案。</td></tr>
+        <tr><td colspan="6" class="muted">还没有方案。</td></tr>
         {% endif %}
       </tbody>
     </table>

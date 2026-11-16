@@ -65,6 +65,9 @@ async function submitBudget(form) {
     plan_version: Number(form.elements.plan_version.value),
     total_yuan: Number(form.elements.total_yuan.value),
     model: form.elements.model.value,
+    use_refund_net: form.elements.use_refund_net
+      ? form.elements.use_refund_net.checked
+      : false,
   };
   try {
     await request("/api/budgets", {
@@ -87,11 +90,41 @@ document.addEventListener("click", (event) => {
   triggerRun(button.dataset.run, button);
 });
 
+async function submitRefund(form) {
+  const submit = form.querySelector("button[type=submit]");
+  clearBanner();
+  submit.disabled = true;
+  const body = {
+    batch_id: form.elements.batch_id.value.trim(),
+    source: form.elements.source.value,
+  };
+  try {
+    await request("/api/refunds/batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    window.location.reload();
+  } catch (error) {
+    banner(error.message);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 const form = document.querySelector("#budget-form");
 if (form) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     submitBudget(form);
+  });
+}
+
+const refundForm = document.querySelector("#refund-form");
+if (refundForm) {
+  refundForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitRefund(refundForm);
   });
 }
 

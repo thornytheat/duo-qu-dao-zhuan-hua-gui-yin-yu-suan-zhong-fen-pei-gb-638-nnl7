@@ -25,6 +25,7 @@ NAV = (
     ("/attribution", "归因结果", "attribution"),
     ("/confidence", "置信区间", "confidence"),
     ("/budgets", "预算与批次", "budgets"),
+    ("/refunds", "退款结转", "refunds"),
     ("/export", "导出", "export"),
 )
 

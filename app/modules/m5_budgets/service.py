@@ -37,18 +37,29 @@ def load_constraints(settings) -> dict:
             "path": str(path)}
 
 
-def channel_rois(store, run_id: str, model: str, spend: dict) -> dict:
+def channel_rois(store, run_id: str, model: str, spend: dict,
+                 net_gmv: dict | None = None) -> dict:
+    """渠道基础 ROI。
+
+    net_gmv 为 None 时用原归因成交额（历史口径，旧版本依据）；
+    传入退款结转后的净额时，ROI 只作用于当前这一版新建议，已审批版本不改写。
+    """
     totals = store.channel_totals(run_id, model)
     rois = {}
     for code in CHANNEL_LABELS:
-        gmv = next((int(row["gmv"] or 0) for row in totals if row["channel"] == code), 0)
+        if net_gmv is not None:
+            gmv = int(net_gmv.get(code, 0))
+        else:
+            gmv = next((int(row["gmv"] or 0) for row in totals
+                        if row["channel"] == code), 0)
         cost = int(spend.get(code, {}).get("cost_cents", 0))
         rois[code] = roi_rules.base_roi(gmv, cost)
     return rois
 
 
 def reallocate(settings, store, run_id: str, plan_version: int,
-               total_cents: int, model: str = "time_decay") -> dict:
+               total_cents: int, model: str = "time_decay",
+               use_refund_net: bool = False) -> dict:
     run = store.get_run(run_id)
     if run is None:
         raise errors.NotFoundRun(f"运行不存在：{run_id}")
@@ -58,7 +69,14 @@ def reallocate(settings, store, run_id: str, plan_version: int,
 
     plan = load_constraints(settings)
     spend_before = run["stats"].get("spend", {})
-    rois = channel_rois(store, run_id, model, spend_before)
+    net_gmv = None
+    refund_view = None
+    if use_refund_net:
+        from ..m8_refunds import service as m8_service
+        refund_view = m8_service.carry_forward(store, run_id, model)
+        net_gmv = {row["channel"]: row["net_cents"]
+                   for row in refund_view["channels"]}
+    rois = channel_rois(store, run_id, model, spend_before, net_gmv)
     result = greedy.allocate(total_cents, plan["channels"], rois,
                              settings.budget_step_cents, settings.marginal_decay)
 
@@ -92,6 +110,8 @@ def reallocate(settings, store, run_id: str, plan_version: int,
         "rows": rows,
         "trace_count": len(result["trace"]),
         "constraints_digest": plan["digest"],
+        "roi_basis": "refund_net" if use_refund_net else "original_gmv",
+        "refund_net_cents": (refund_view["totals"] if refund_view else None),
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     store.save_budget(run_id, plan_version, total_cents, payload, payload["created_at"])

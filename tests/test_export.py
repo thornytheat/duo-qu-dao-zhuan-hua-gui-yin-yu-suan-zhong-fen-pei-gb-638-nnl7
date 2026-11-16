@@ -28,6 +28,16 @@ def test_export_json_uses_integer_cents(client_dirty):
     assert credit_total == totals["time_decay"]
 
 
+def test_export_json_carries_refund_view(client_dirty):
+    client_dirty.post("/api/refunds/batches",
+                      json={"batch_id": "RF-EXP", "source": "refunds_ok.csv"})
+    payload = client_dirty.get("/api/export.json").json()
+    assert payload["refunds"]["totals"]["refund_cents"] > 0
+    assert payload["refunds"]["reconcile"]["all_balanced"] is True
+    # 历史证据行数量不被退款改变
+    assert len(payload["orders"]) == 8
+
+
 def test_manifest_recomputes_run_id(client_dirty):
     manifest = client_dirty.get("/api/manifest").json()
     assert manifest["replayable"] is True

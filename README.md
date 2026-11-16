@@ -2,7 +2,8 @@
 
 六个投放渠道的触点与订单进系统，按窗口归因到订单，五个模型各自给出渠道份额，
 再按边际 ROI 把预算重排到各渠道；最后按订单簇重采样，给出份额与 ROI 的区间和结论。
-脏样例自带 9 类问题，导入后能逐行看到为什么不计数。
+脏样例自带 9 类问题，导入后能逐行看到为什么不计数。晚到的退款按原订单触点份额冲减，
+历史花费与已审批预算版本原样保留，退款差异单独结转，只影响下一版预算建议。
 
 ## 功能模块
 
@@ -15,6 +16,7 @@
 | M5 预算重分配与批次 | 边际 ROI 贪心、渠道上下限、版本锁 | `POST /api/budgets` |
 | M6 报告导出 | 证据行 CSV、整体 JSON、运行清单 | `GET /api/export.csv` |
 | M7 归因置信区间 | 订单簇重采样、份额与 ROI 区间、稳健性结论 | `POST /api/confidence` |
+| M8 退款结转 | 退款批次幂等续跑、按原单份额冲减、净额与调整 ROI、四账对平 | `POST /api/refunds/batches` |
 
 ## 核心规则
 
@@ -25,6 +27,8 @@
 5. 预算按边际 ROI 贪心加档，每次 1000 元，受渠道上下限约束，分完等于总额。
 6. 方案版本必须等于当前最大版本 + 1，旧版本提交返回 409。
 7. 区间按订单簇有放回抽样 200 次，同种子可复算；份额区间与 ROI 区间用 90% 分位，首位保持低于 90%、半宽超过 5 个百分点或前两渠道区间重叠都判「不稳」。
+8. 退款不改写历史：按原订单在各模型下的触点份额（整数分、最大余额法）冲减，逐单守恒；同批次重试幂等不重复冲减，中断从行级检查点续跑，失败保留旧版并可同内容重试。
+9. 退款差异单独结转：渠道净额 = 成交额 − 退款，调整 ROI 只在 `use_refund_net=true` 的下一版预算生效；退款、订单净额、渠道花费、预算余额四账对平。
 
 详见 `docs/DEPTH.md`（功能模块表 + 陷阱表）与 `docs/DATA-DICTIONARY.md`（字段、单位、窗口、原因码）。
 
@@ -58,6 +62,7 @@ python3 -m pytest -q
 | `/attribution` | 五个模型的渠道份额与 ROI |
 | `/confidence` | 份额与 ROI 区间、抽样参数、稳健性结论、未入帧订单 |
 | `/budgets` | 渠道上下限、预算重排、批次历史 |
+| `/refunds` | 退款批次、结转净额、调整 ROI、四账对平 |
 | `/export` | 运行清单、输入摘要、下载 |
 
 ## 目录
@@ -66,14 +71,14 @@ python3 -m pytest -q
 app/
   main.py config.py errors.py reasons.py manifest.py store.py web.py
   modules/m1_ingest/  m2_window/  m3_quality/  m4_attribution/  m5_budgets/  m6_export/
-          m7_confidence/
+          m7_confidence/  m8_refunds/
   templates/  static/
 docs/       DEPTH.md DATA-DICTIONARY.md OPERATIONS.md API.md SAMPLES.md
 tests/      conftest.py test_<模块>.py test_e2e.py fixtures/
-sample_data/ dirty/ clean/ header_only/ blank/ empty/ budget_plan.json
+sample_data/ dirty/ clean/ header_only/ blank/ empty/ refunds/ budget_plan.json
 ```
 
 ## 已知不覆盖
 
-退款单不参与计算；不做增量实验（对照组）；各渠道共用同一套窗口；预算衰减系数是常量；
-重采样不按用户或时段分层，也不做偏差校正。
+退款只做金额冲减与净额结转，不自动发起反向投放、不回退已发生的媒体花费；不做增量实验
+（对照组）；各渠道共用同一套窗口；预算衰减系数是常量；重采样不按用户或时段分层，也不做偏差校正。

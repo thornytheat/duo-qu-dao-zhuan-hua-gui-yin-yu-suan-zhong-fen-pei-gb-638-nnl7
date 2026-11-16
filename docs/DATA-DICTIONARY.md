@@ -109,6 +109,22 @@
 
 帧摘要取 `sha256(model + 簇的订单号与渠道金额)`，同一份证据重算得到同一个值。
 
+## 退款结转（M8）
+
+| 项 | 定义 |
+|---|---|
+| 输入 | `sample_data/refunds/*.csv`，列 `refund_id,order_id,refund,refund_time,unit`，金额/时间规则与订单一致 |
+| 不可变 | `orders`、`credits`、`budgets`、`logs` 原样保留；退款只写 `refund_batches` / `refund_rows` / `refund_allocations` |
+| 份额来源 | 退款沿用原订单在每个模型下的既有 credits 触点份额，不重新归因 |
+| 拆分 | 整数分 + 最大余额法，每笔退款在每个模型下拆完合计 = 退款额，差额为 0 |
+| 批次状态 | `RUNNING`（含中断断点）→ `APPLIED`（全行冲减）/ `PARTIAL`（有隔离行）/ `FAILED`（抛错回滚） |
+| 幂等键 | 批次号 + 归一后内容指纹；同号同内容重试幂等回放，同号异内容 409 |
+| 断点续跑 | 行级 `applied` 检查点；续跑跳过已冲减行，份额从全部 APPLIED 行统一重建，不重复冲减 |
+| 失败处理 | 本批份额残骸清空、批次标 `FAILED`，旧批次与已审批预算不动；同内容可重试 |
+| 净额 | 渠道净额 = 原归因成交额 − 退款冲减；订单净额 = 有效订单成交额 − 订单维度退款 |
+| 调整 ROI | 渠道净额 ÷ 渠道花费；仅在 `use_refund_net=true` 的下一版预算中使用，旧版本 `roi_basis=original_gmv` 不变 |
+| 对账 | 退款账、订单净额账、渠道花费账、预算余额账四账对平，见 `/api/refunds/reconcile` |
+
 ## 空态
 
 | 状态码 | 含义 | 结论 |
@@ -147,5 +163,12 @@
 | `CI_INTERVAL_OVERLAP` | 前两渠道区间重叠 | 结论 |
 | `CI_BUDGET_MISMATCH` | 预算首位与份额首位不一致 | 结论 |
 | `CI_SAME_SECOND_TIE` | 同秒触点按编号定序 | 结论 |
+| `RF_ROW_DUP_IDENTICAL` | 同批次退款行编号重复且内容相同 | 隔离 |
+| `RF_ROW_DUP_CONFLICT` | 同批次退款行编号重复且字段冲突 | 隔离 |
+| `RF_ORDER_UNKNOWN` | 退款引用的订单不存在 | 隔离 |
+| `RF_ORDER_INVALID` | 退款引用的订单未通过质检 | 隔离 |
+| `RF_AMOUNT_INVALID` | 退款金额无法解析、非正或编号缺失 | 隔离 |
+| `RF_OVER_REFUND` | 累计退款超过订单成交额 | 隔离 |
+| `RF_TIME_UNPARSABLE` | 退款时间无法解析 | 隔离 |
 
 一行命中多条时按上表序号取最小者，与规则书写顺序无关。

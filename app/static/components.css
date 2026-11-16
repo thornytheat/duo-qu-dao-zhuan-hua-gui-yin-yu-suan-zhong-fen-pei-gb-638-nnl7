@@ -165,6 +165,15 @@ tr.is-balanced td:last-child { color: var(--ok); }
   outline: 2px solid var(--info);
   outline-offset: 0;
 }
+.field label.check {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  white-space: nowrap;
+}
+.field label.check input { min-width: 0; }
 
 .banner {
   display: none;

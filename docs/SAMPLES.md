@@ -26,3 +26,22 @@
 | 负成本 | `TP-1025` | `TD_COST_INVALID` |
 | 别名环与自引用 | 别名文件 | 合并为一个等价类 |
 | 别名坏行 | 别名文件最后一行 | `ALIAS_BAD_ROW` |
+
+## 退款样例 `sample_data/refunds/`
+
+| 文件 | 场景 | 期望批次状态 |
+|---|---|---|
+| `refunds_ok.csv` | 4 笔正常退款，引用 O-1001/1002/1003/1006 | `APPLIED`，四账对平 |
+| `refunds_mixed.csv` | 超额、未知单、质检失败单、空值金额、同批重复行、缺单位列 | `PARTIAL`，6 行隔离、2 行冲减 |
+
+`refunds_mixed.csv` 逐行期望：
+
+| 退款单 | 结果 | 原因码 |
+|---|---|---|
+| `RF-B-001` | 冲减 300.00 元 | — |
+| `RF-B-002` | 隔离，累计退款超过 O-1004 成交额 | `RF_OVER_REFUND` |
+| `RF-B-003` | 隔离，订单号不存在 | `RF_ORDER_UNKNOWN` |
+| `RF-B-004` | 隔离，O-1005 金额是哨兵未过质检 | `RF_ORDER_INVALID` |
+| `RF-B-005` | 隔离，退款金额是空值哨兵 | `RF_AMOUNT_INVALID` |
+| `RF-B-006` 两行 | 首条冲减，重复行隔离 | `RF_ROW_DUP_IDENTICAL` |
+| 末行缺 `unit` 列 | 列数不齐隔离 | `RF_AMOUNT_INVALID` |

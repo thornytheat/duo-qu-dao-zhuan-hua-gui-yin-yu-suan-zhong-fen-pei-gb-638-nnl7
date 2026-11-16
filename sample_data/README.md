@@ -5,4 +5,6 @@
   千分位、全角数字、万元单位、空值哨兵、跨设备别名与自引用。
 - `clean/`：6 条触点 3 张订单，走同一条代码路径。
 - `header_only/`、`blank/`、`empty/`：三种空态。
+- `refunds/`：退款批次 CSV。`refunds_ok.csv` 全部冲减成功；`refunds_mixed.csv` 含超额、
+  未知单、质检失败单、空值金额、同批重复行与列数不齐，批次落 `PARTIAL`。
 - `budget_plan.json`：预算总额与各渠道上下限。

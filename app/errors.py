@@ -40,6 +40,16 @@ class BudgetInfeasible(DomainError):
     code = "E_BUDGET_INFEASIBLE"
 
 
+class RefundConflict(DomainError):
+    status = 409
+    code = "E_REFUND_CONFLICT"
+
+
+class RefundInfeasible(DomainError):
+    status = 422
+    code = "E_REFUND_INFEASIBLE"
+
+
 def install_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainError)
     async def _domain(request: Request, exc: DomainError):  # noqa: ANN001

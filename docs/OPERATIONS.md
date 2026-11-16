@@ -48,3 +48,24 @@ docker compose up -d --build
 3. 「归因结果」看五个模型合计是否都等于订单成交额。
 4. 「置信区间」看份额区间与结论：半宽过大或首位不稳说明订单簇太少，补数据再算。
 5. 「导出」看运行清单的 `recomputed_run_id` 是否与 `run_id` 一致。
+
+## 退款结转
+
+退款晚到时不需要重跑归因，历史花费与已审批预算版本都不会被改写：
+
+```bash
+# 提交批次（同 batch_id 重试幂等，中断后再调一次即续跑）
+curl -s -X POST http://127.0.0.1:18207/api/refunds/batches \
+  -H 'Content-Type: application/json' \
+  -d '{"batch_id":"RF-202611-01","source":"refunds_ok.csv"}'
+# 看净额、调整 ROI 与四账对平
+curl -s 'http://127.0.0.1:18207/api/refunds/reconcile?model=time_decay'
+# 下一版预算按净额 ROI 重排（旧版本保持 original_gmv 不变）
+curl -s -X POST http://127.0.0.1:18207/api/budgets \
+  -H 'Content-Type: application/json' \
+  -d '{"plan_version":2,"total_yuan":60000,"use_refund_net":true}'
+```
+
+- 批次状态 `RUNNING / APPLIED / PARTIAL / FAILED`，失败只回滚本批，旧版保留，用同一批次号同内容重试即可。
+- 同批次号换内容返回 409 `E_REFUND_CONFLICT`；超额退款返回隔离行 `RF_OVER_REFUND`，不冲减。
+- 「退款结转」页可逐行查看隔离原因，并导出冲减份额 CSV。
