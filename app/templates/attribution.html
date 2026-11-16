@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}归因结果{% endblock %}
+{% block heading %}归因结果{% endblock %}
+{% block content %}
+{% if not totals %}
+<section class="section"><div class="empty">还没有归因结果。</div></section>
+{% else %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">模型合计</span>
+    <span class="section__sub">订单 {{ order_total|money }} 元</span>
+  </div>
+  <div class="toolbar">
+    {% for code, label in models %}
+    <a class="chip{% if code == model %} is-active{% endif %}" href="/attribution?model={{ code }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>模型</th><th class="num" data-sort="num">合计(元)</th><th class="num" data-sort="num">份额行</th><th>守恒</th></tr></thead>
+      <tbody>
+        {% for code, label in models %}
+        {% set item = totals.get(code) %}
+        <tr class="{% if item and item.gmv_cents == order_total %}is-balanced{% endif %}">
+          <td><a class="link" href="/attribution?model={{ code }}">{{ label }}</a></td>
+          <td class="num">{{ item.gmv_cents|money if item else "—" }}</td>
+          <td class="num">{{ item.rows if item else 0 }}</td>
+          <td>{% if item and item.gmv_cents == order_total %}<span class="dot dot--ok"></span>一致{% else %}<span class="dot dot--bad"></span>差异 {{ (item.gmv_cents if item else 0) - order_total }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">渠道份额</span>
+    <span class="section__sub">{{ model_total|money }} 元 · {{ channels|length }} 个渠道</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>渠道</th><th class="num" data-sort="num">份额(元)</th><th class="num" data-sort="num">占比</th><th class="num" data-sort="num">花费(元)</th><th class="num" data-sort="num">ROI</th><th class="num" data-sort="num">迟到</th></tr></thead>
+      <tbody>
+        {% for row in channels %}
+        <tr>
+          <td title="{{ row.channel }}">{{ channel_labels.get(row.channel, row.channel) }}</td>
+          <td class="num">{{ row.gmv_cents|money }}</td>
+          <td class="num">{{ row.share_pct|pct }}</td>
+          <td class="num">{{ row.spend_cents|money }}</td>
+          <td class="num">{{ row.roi|ratio if row.roi is not none else "—" }}</td>
+          <td class="num">{{ row.late_rows }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">份额明细</span>
+    <span class="section__sub">{{ credits|length }} 行</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>订单号</th><th>触点编号</th><th>渠道</th><th class="num" data-sort="num">份额(分)</th><th class="num" data-sort="num">位置</th><th>迟到</th></tr></thead>
+      <tbody>
+        {% for row in credits %}
+        <tr>
+          <td class="mono">{{ row.order_id }}</td>
+          <td class="mono">{{ row.touch_id }}</td>
+          <td title="{{ row.channel }}">{{ channel_labels.get(row.channel, row.channel) }}</td>
+          <td class="num">{{ row.gmv_cents }}</td>
+          <td class="num muted">{{ row.position }}</td>
+          <td>{% if row.late %}<span class="dot dot--warn"></span>是{% else %}<span class="dot dot--muted"></span>否{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

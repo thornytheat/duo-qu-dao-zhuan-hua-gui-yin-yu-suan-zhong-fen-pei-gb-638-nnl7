@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}归因控制台{% endblock %} · mixcredit</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/layout.css">
+<link rel="stylesheet" href="/static/components.css">
+</head>
+<body data-page="{{ active }}">
+<aside class="rail">
+  <div class="rail__brand">mixcredit<span class="rail__sub">归因控制台</span></div>
+  <nav class="rail__nav" aria-label="主导航">
+    {% for href, label, key in nav %}
+    <a class="rail__link{% if key == active %} is-active{% endif %}" href="{{ href }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="rail__foot">
+    <div>{{ run.run_id if run else "未运行" }}</div>
+    <div>规则 {{ rule_version }}</div>
+  </div>
+</aside>
+<main class="main">
+  <header class="topbar">
+    <div class="topbar__title">{% block heading %}{% endblock %}</div>
+    <div class="topbar__meta">
+      {% if run %}
+      <span>批次 <b>{{ run.run_id }}</b></span>
+      <span>数据 <b>{{ run.dataset }}</b></span>
+      <span>生成 <b>{{ run.created_at|local }}</b></span>
+      <span>时区 <b>+08:00</b></span>
+      <span>状态 <b>{{ run.status|status_label }}</b></span>
+      {% else %}
+      <span>批次 <b>—</b></span>
+      <span>时区 <b>+08:00</b></span>
+      {% endif %}
+    </div>
+  </header>
+  <div class="banner" id="banner" role="alert"></div>
+  {% block content %}{% endblock %}
+</main>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

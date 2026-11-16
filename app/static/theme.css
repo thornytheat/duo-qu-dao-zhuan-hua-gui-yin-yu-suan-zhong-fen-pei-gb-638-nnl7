@@ -1,0 +1,27 @@
+/* L1 运维控制台：深灰蓝底、等宽为主、单点强调色、6px 状态灯 */
+:root {
+  --bg: #131a22;          /* HSL 210 10% */
+  --bg-deep: #0d1319;
+  --surface: #18212b;
+  --surface-2: #1e2833;
+  --ink: #dfe7ef;
+  --ink-mid: #a9b7c6;
+  --ink-muted: #6f8094;
+  --line: #263340;
+  --line-strong: #34465a;
+  --accent: #4a9eff;      /* 唯一强调色：主按钮 */
+  --accent-ink: #06121f;
+  --ok: #4fb477;
+  --warn: #d8a13c;
+  --bad: #d9614f;
+  --info: #6f8fb8;
+  --neutral: #55677b;
+  --font-ui: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-num: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 2px;
+  --radius-sm: 1px;
+  --pad: 10px;
+  --gap: 8px;
+  --row-h: 26px;
+  --shadow: none;
+}

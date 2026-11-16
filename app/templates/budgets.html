@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}预算与批次{% endblock %}
+{% block heading %}预算与批次{% endblock %}
+{% block content %}
+{% if not run %}
+<section class="section"><div class="empty">还没有预算方案。</div></section>
+{% else %}
+<div class="grid-2">
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">渠道上下限</span>
+      <span class="section__sub">总额 {{ plan.total_cents|money }} 元</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>渠道</th><th class="num" data-sort="num">下限(元)</th><th class="num" data-sort="num">上限(元)</th><th class="num" data-sort="num">当前花费(元)</th></tr></thead>
+        <tbody>
+          {% for code, item in plan.channels.items() %}
+          <tr>
+            <td>{{ item.label }}</td>
+            <td class="num">{{ item.min_cents|money }}</td>
+            <td class="num">{{ item.cap_cents|money }}</td>
+            <td class="num">{{ (stats.spend.get(code, {}).get('cost_cents', 0))|money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">重分配</span>
+      <span class="section__sub">下一版 v{{ next_version }}</span>
+    </div>
+    <form id="budget-form" class="toolbar" autocomplete="off">
+      <div class="field">
+        <label for="budget-total">总额(元)</label>
+        <input id="budget-total" name="total_yuan" type="number" min="16000" step="1000"
+               value="{{ (latest.payload.total_cents // 100) if latest else (plan.total_cents // 100) }}">
+      </div>
+      <div class="field">
+        <label for="budget-version">方案版本</label>
+        <input id="budget-version" name="plan_version" type="number" min="1" step="1" value="{{ next_version }}">
+      </div>
+      <div class="field">
+        <label for="budget-model">归因模型</label>
+        <select id="budget-model" name="model">
+          <option value="time_decay">时间衰减</option>
+          <option value="linear">线性均分</option>
+          <option value="position">位置加权</option>
+          <option value="last">末次触点</option>
+          <option value="first">首次触点</option>
+        </select>
+      </div>
+      <button class="btn btn--primary" type="submit">提交</button>
+    </form>
+    {% if latest %}
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>渠道</th><th class="num" data-sort="num">原(元)</th><th class="num" data-sort="num">新(元)</th><th class="num" data-sort="num">增减</th><th class="num" data-sort="num">基础 ROI</th><th class="num" data-sort="num">边际 ROI</th><th>约束</th></tr></thead>
+        <tbody>
+          {% for row in latest.payload.rows %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="num">{{ row.spend_before_cents|money }}</td>
+            <td class="num">{{ row.spend_new_cents|money }}</td>
+            <td class="num">{{ row.delta_cents|money }}</td>
+            <td class="num">{{ row.base_roi }}</td>
+            <td class="num">{{ row.marginal_roi }}</td>
+            <td class="muted">{{ row.hit }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">方案版本</span>
+    <span class="section__sub">{{ budgets|length }} 版 · 合计 {{ latest.payload.total_cents|money if latest else "—" }} 元</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th class="num" data-sort="num">版本</th><th class="num" data-sort="num">总额(元)</th><th>模型</th><th class="num" data-sort="num">差额(分)</th><th>生成</th></tr></thead>
+      <tbody>
+        {% for item in budgets %}
+        <tr>
+          <td class="num">v{{ item.plan_version }}</td>
+          <td class="num">{{ item.total_cents|money }}</td>
+          <td class="muted">{{ item.payload.model }}</td>
+          <td class="num">{{ 0 if item.payload.balanced else item.total_cents - (item.payload.rows|sum(attribute='spend_new_cents')) }}</td>
+          <td class="mono">{{ item.created_at|local }}</td>
+        </tr>
+        {% endfor %}
+        {% if not budgets %}
+        <tr><td colspan="5" class="muted">还没有方案。</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">批次历史</span>
+    <span class="section__sub">{{ batches|length }} 次</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>批次</th><th>数据</th><th class="num" data-sort="num">触点</th><th class="num" data-sort="num">计入</th><th class="num" data-sort="num">成交额(元)</th><th class="num" data-sort="num">方案</th><th class="num" data-sort="num">耗时(ms)</th><th>生成</th></tr></thead>
+      <tbody>
+        {% for item in batches %}
+        <tr>
+          <td class="mono">{{ item.run_id }}</td>
+          <td>{{ item.dataset }}</td>
+          <td class="num">{{ item.accounts.touch_input }}</td>
+          <td class="num">{{ item.accounts.touch_counted }}</td>
+          <td class="num">{{ item.gmv_cents|money }}</td>
+          <td class="num">{{ ("v" ~ item.plan_version) if item.plan_version else "—" }}</td>
+          <td class="num muted">{{ item.elapsed_ms }}</td>
+          <td class="mono">{{ item.created_at|local }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

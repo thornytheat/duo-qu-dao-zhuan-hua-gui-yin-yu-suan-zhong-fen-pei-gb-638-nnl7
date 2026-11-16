@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}隔离区{% endblock %}
+{% block heading %}隔离区{% endblock %}
+{% block content %}
+{% if not rows and not counts %}
+<section class="section"><div class="empty">还没有隔离行。</div></section>
+{% else %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">原因分布</span>
+    <span class="section__sub">{{ total }} 行 <a class="link" href="/api/quarantine.csv">导出 CSV</a></span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>原因码</th><th>含义</th><th>级别</th><th class="num" data-sort="num">行数</th></tr></thead>
+      <tbody>
+        {% for item in counts %}
+        <tr>
+          <td class="mono"><a class="link" href="/quarantine?code={{ item.reason }}">{{ item.reason }}</a></td>
+          <td>{{ item.reason|reason }}</td>
+          <td class="muted">{{ item.reason|rlevel }}</td>
+          <td class="num">{{ item.n }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">隔离明细</span>
+    <span class="section__sub">{{ rows|length }} 行{% if code %} · {{ code }}{% endif %}</span>
+  </div>
+  <div class="toolbar">
+    <a class="chip{% if not code %} is-active{% endif %}" href="/quarantine">全部</a>
+    {% for item in counts[:6] %}
+    <a class="chip{% if code == item.reason %} is-active{% endif %}" href="/quarantine?code={{ item.reason }}">{{ item.reason }} {{ item.n }}</a>
+    {% endfor %}
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>来源</th><th class="num" data-sort="num">行号</th><th class="num" data-sort="num">物理行</th><th>原因码</th><th>原值</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.source }}</td>
+          <td class="num">{{ row.row_no }}</td>
+          <td class="num muted">{{ row.raw_line }}</td>
+          <td class="mono">{{ row.reason }}</td>
+          <td class="wrap mono muted">{{ row.raw_value }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

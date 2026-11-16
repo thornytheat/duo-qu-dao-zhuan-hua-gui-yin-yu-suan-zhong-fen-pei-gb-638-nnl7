@@ -1,0 +1,11 @@
+{
+  "total_yuan": 60000,
+  "channels": {
+    "douyin_feed": {"min_yuan": 5000, "cap_yuan": 20000},
+    "xhs_seed": {"min_yuan": 3000, "cap_yuan": 15000},
+    "wechat_moments": {"min_yuan": 2000, "cap_yuan": 12000},
+    "baidu_search": {"min_yuan": 2000, "cap_yuan": 10000},
+    "tmall_ads": {"min_yuan": 3000, "cap_yuan": 14000},
+    "private_group": {"min_yuan": 1000, "cap_yuan": 6000}
+  }
+}

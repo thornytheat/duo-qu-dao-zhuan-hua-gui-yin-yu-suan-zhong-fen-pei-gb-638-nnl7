@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    image: mixcredit:local
+    ports:
+      - "18207:8000"
+    environment:
+      MIXCREDIT_DB: /data/mixcredit.sqlite
+      MIXCREDIT_SAMPLE_DIR: /app/sample_data
+      TZ: Asia/Shanghai
+    volumes:
+      - mixcredit-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+volumes:
+  mixcredit-data:

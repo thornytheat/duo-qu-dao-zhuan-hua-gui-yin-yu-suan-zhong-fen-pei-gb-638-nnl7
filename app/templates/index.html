@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}作业总览{% endblock %}
+{% block heading %}作业总览{% endblock %}
+{% block content %}
+{% if not accounts %}
+<section class="section">
+  <div class="empty">还没有运行。<button class="btn btn--primary" data-run="dirty">运行样例</button></div>
+</section>
+{% else %}
+<section class="section">
+  <div class="strip">
+    <div class="meter"><div class="meter__label">触点</div><div class="meter__value">{{ accounts.touch_input|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label"><span class="dot dot--ok"></span>计入</div><div class="meter__value">{{ accounts.touch_counted|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label"><span class="dot dot--warn"></span>迟到</div><div class="meter__value">{{ accounts.touch_late|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label"><span class="dot dot--muted"></span>不计入</div><div class="meter__value">{{ accounts.touch_dropped|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label">订单</div><div class="meter__value">{{ accounts.order_ok|intcomma }}<span class="meter__unit">/ {{ accounts.order_input|intcomma }}</span></div></div>
+    <div class="meter"><div class="meter__label">成交额</div><div class="meter__value">{{ stats.gmv_cents|money }}<span class="meter__unit">元</span></div></div>
+  </div>
+</section>
+
+<div class="grid-2">
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">四账</span>
+      <span class="section__sub">
+        {% if reconcile.touch_balanced and reconcile.order_balanced and reconcile.gmv_balanced %}
+        <span class="dot dot--ok"></span>差额 {{ reconcile.touch_delta }}
+        {% else %}
+        <span class="dot dot--bad"></span>差额 {{ reconcile.touch_delta }}
+        {% endif %}
+      </span>
+    </div>
+    <div class="table-wrap">
+      <table class="t">
+        <thead><tr><th>账目</th><th class="num">行数</th><th class="num">占比</th></tr></thead>
+        <tbody>
+          <tr><td>输入触点</td><td class="num">{{ accounts.touch_input }}</td><td class="num">100.0%</td></tr>
+          <tr><td><span class="dot dot--ok"></span>计入</td><td class="num">{{ accounts.touch_counted }}</td><td class="num">{{ (accounts.touch_counted * 100 / accounts.touch_input)|round(1) if accounts.touch_input else 0 }}%</td></tr>
+          <tr class="is-late"><td><span class="dot dot--warn"></span>迟到</td><td class="num">{{ accounts.touch_late }}</td><td class="num">{{ (accounts.touch_late * 100 / accounts.touch_input)|round(1) if accounts.touch_input else 0 }}%</td></tr>
+          <tr><td><span class="dot dot--muted"></span>不计入</td><td class="num">{{ accounts.touch_dropped }}</td><td class="num">{{ (accounts.touch_dropped * 100 / accounts.touch_input)|round(1) if accounts.touch_input else 0 }}%</td></tr>
+          <tr><td>其中窗口外</td><td class="num">{{ accounts.touch_out_of_window }}</td><td class="num muted">—</td></tr>
+          <tr><td>其中隔离</td><td class="num">{{ accounts.touch_quarantined }}</td><td class="num muted">—</td></tr>
+          <tr><td>订单有效</td><td class="num">{{ accounts.order_ok }}</td><td class="num">{{ (accounts.order_ok * 100 / accounts.order_input)|round(1) if accounts.order_input else 0 }}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">归因合计</span>
+      <span class="section__sub">订单 {{ accounts.order_ok }} 单 · {{ stats.gmv_cents|money }} 元</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>模型</th><th class="num" data-sort="num">合计(元)</th><th class="num" data-sort="num">份额(分)</th><th class="num">守恒</th></tr></thead>
+        <tbody>
+          {% for model in models %}
+          <tr>
+            <td>{{ model.label }}</td>
+            <td class="num">{{ model.gmv_cents|money }}</td>
+            <td class="num">{{ model.rows }}</td>
+            <td class="num">{% if model.balanced %}<span class="dot dot--ok"></span>一致{% else %}<span class="dot dot--bad"></span>差 {{ model.gmv_cents - model.order_total_cents }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">渠道花费</span>
+      <span class="section__sub">{{ stats.cost_cents_total|money }} 元 · {{ stats.files.touch.encoding }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>渠道</th><th class="num" data-sort="num">花费(元)</th><th class="num" data-sort="num">触点</th></tr></thead>
+        <tbody>
+          {% for code, item in spend %}
+          <tr><td>{{ item.label }}</td><td class="num">{{ item.cost_cents|money }}</td><td class="num">{{ item.n }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">原因码</span>
+      <span class="section__sub">{{ reasons|length }} 类</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>原因码</th><th>含义</th><th class="num" data-sort="num">行数</th></tr></thead>
+        <tbody>
+          {% for item in reasons %}
+          <tr><td class="mono">{{ item.code }}</td><td>{{ item.label }}</td><td class="num">{{ item.count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">运行日志</span>
+    <span class="section__sub">{{ logs|length }} 行 · {{ stats.files.touch.bytes }} B</span>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="log-pause" aria-pressed="false" type="button">暂停</button>
+    <button class="btn btn--primary" data-run="dirty" type="button">运行</button>
+    <button class="btn" data-run="clean" type="button">运行 clean</button>
+    <span class="toolbar__spacer"></span>
+    <span class="legend">
+      <span><span class="dot dot--ok"></span>计入</span>
+      <span><span class="dot dot--warn"></span>迟到</span>
+      <span><span class="dot dot--bad"></span>失败</span>
+      <span><span class="dot dot--muted"></span>不计入</span>
+    </span>
+  </div>
+  <div class="log" id="log" data-run-id="{{ run.run_id }}" data-last-seq="{{ logs[-1].seq if logs else 0 }}">
+    {% for line in logs %}
+    <div class="log-line{% if line.level == 'WARN' %} is-warn{% elif line.level == 'ERROR' %} is-error{% endif %}">
+      <span class="ts">{{ line.ts|local }}</span><span class="lvl">{{ line.level }}</span><span class="msg">{{ line.message }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

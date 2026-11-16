@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}置信区间{% endblock %}
+{% block heading %}置信区间{% endblock %}
+{% block content %}
+{% if not result or result.status == "empty" %}
+<section class="section"><div class="empty">还没有可重采样的订单。</div></section>
+{% else %}
+<section class="section">
+  <div class="strip">
+    <div class="meter"><div class="meter__label">订单簇</div><div class="meter__value">{{ result.clusters|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label">份额合计</div><div class="meter__value">{{ result.frame_total_cents|money }}<span class="meter__unit">元</span></div></div>
+    <div class="meter"><div class="meter__label">重采样</div><div class="meter__value">{{ result.resamples|intcomma }}</div></div>
+    <div class="meter"><div class="meter__label">种子</div><div class="meter__value">{{ result.seed }}</div></div>
+    <div class="meter"><div class="meter__label">区间</div><div class="meter__value">{{ 100 - result.alpha_pct }}<span class="meter__unit">%</span></div></div>
+    <div class="meter"><div class="meter__label">模型</div><div class="meter__value">{{ result.label }}</div></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">抽样</span>
+    <span class="section__sub">每次 {{ result.draws.picks_per_draw }} 单 · 合计 {{ result.draws.total_min_cents|money }} – {{ result.draws.total_max_cents|money }} 元</span>
+  </div>
+  <form class="toolbar" method="get" action="/confidence" autocomplete="off">
+    <div class="field">
+      <label for="ci-model">模型</label>
+      <select id="ci-model" name="model">
+        {% for code, label in models %}
+        <option value="{{ code }}"{% if code == form.model %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="ci-resamples">次数</label>
+      <input id="ci-resamples" name="resamples" type="number" min="20" max="2000" step="20" value="{{ form.resamples }}">
+    </div>
+    <div class="field">
+      <label for="ci-seed">种子</label>
+      <input id="ci-seed" name="seed" type="number" min="0" max="2147483647" step="1" value="{{ form.seed }}">
+    </div>
+    <button class="btn btn--primary" type="submit">重算</button>
+    <span class="toolbar__spacer"></span>
+    <span class="section__sub">帧摘要 <span class="mono">{{ result.frame_digest[:16] }}</span></span>
+  </form>
+  {% if error %}<div class="banner is-on">{{ error }}</div>{% endif %}
+</section>
+
+<div class="grid-2">
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">稳健性结论</span>
+      <span class="section__sub">
+        {% if result.verdict.status == "成立" %}<span class="dot dot--ok"></span>成立{% else %}<span class="dot dot--bad"></span>不稳{% endif %}
+      </span>
+    </div>
+    <dl class="kv">
+      <dt>首位渠道</dt><dd>{{ result.verdict.top_label or "—" }}</dd>
+      <dt>首位保持</dt><dd class="mono">{{ result.verdict.top_stay_pct }}%</dd>
+      <dt>最大半宽</dt><dd class="mono">{{ result.verdict.max_half_width_pp }} pp</dd>
+      <dt>次位渠道</dt><dd>{{ result.verdict.runner_label or "—" }}</dd>
+      <dt>预算方案</dt><dd class="mono">{{ result.budget.label }}{% if result.budget.plan_version %} · v{{ result.budget.plan_version }}{% endif %}</dd>
+      <dt>预算首位</dt><dd>{{ result.budget.top_label or "—" }}</dd>
+      <dt>份额守恒</dt><dd class="mono">{% if result.balanced %}差额 0{% else %}存在差额{% endif %}</dd>
+      <dt>跳过订单</dt><dd class="mono">{{ result.skipped|length }} 单 · 重复 {{ result.duplicates|length }} 组</dd>
+    </dl>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">结论原因码</span>
+      <span class="section__sub">{{ result.reasons|length }} 条</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t" data-sortable>
+        <thead><tr><th>原因码</th><th>含义</th><th>级别</th></tr></thead>
+        <tbody>
+          {% for item in result.reasons %}
+          <tr>
+            <td class="mono">{{ item.code }}</td>
+            <td>{{ item.label }}</td>
+            <td class="muted">{{ item.level }}</td>
+          </tr>
+          {% endfor %}
+          {% if not result.reasons %}
+          <tr><td colspan="3" class="muted">没有命中原因码。</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">渠道区间</span>
+    <span class="section__sub">{{ result.channels|length }} 个渠道 · {{ 100 - result.alpha_pct }}% 区间</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead>
+        <tr>
+          <th>渠道</th><th class="num" data-sort="num">份额(元)</th><th class="num" data-sort="num">份额</th>
+          <th class="num" data-sort="num">下限</th><th class="num" data-sort="num">上限</th>
+          <th class="num" data-sort="num">半宽(pp)</th><th class="num" data-sort="num">首位保持</th>
+          <th class="num" data-sort="num">ROI</th><th class="num" data-sort="num">ROI 下限</th>
+          <th class="num" data-sort="num">ROI 上限</th><th class="num" data-sort="num">花费(元)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in result.channels %}
+        <tr>
+          <td title="{{ row.channel }}">{{ row.label }}</td>
+          <td class="num">{{ row.point_cents|money }}</td>
+          <td class="num">{{ row.share_pct }}%</td>
+          <td class="num muted">{{ row.share_lo }}%</td>
+          <td class="num muted">{{ row.share_hi }}%</td>
+          <td class="num">{{ row.half_width_pp }}</td>
+          <td class="num">{{ row.top_stay_pct }}%</td>
+          <td class="num">{{ row.roi|ratio }}</td>
+          <td class="num muted">{{ row.roi_lo|ratio }}</td>
+          <td class="num muted">{{ row.roi_hi|ratio }}</td>
+          <td class="num">{{ row.spend_cents|money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">未入帧订单</span>
+    <span class="section__sub">{{ result.skipped|length }} 单</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>订单号</th><th class="num" data-sort="num">行数</th><th>原因码</th><th>含义</th></tr></thead>
+      <tbody>
+        {% for row in result.skipped %}
+        <tr>
+          <td class="mono">{{ row.order_id }}</td>
+          <td class="num">{{ row.rows }}</td>
+          <td class="mono">{{ row.reason }}</td>
+          <td class="muted">{{ row.reason|reason }}</td>
+        </tr>
+        {% endfor %}
+        {% if not result.skipped %}
+        <tr><td colspan="4" class="muted">没有跳过订单。</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">帧明细</span>
+    <span class="section__sub">{{ result.detail|length }} 条 · 位次按事件时间与触点编号</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>订单号</th><th>触点编号</th><th>渠道</th><th class="num" data-sort="num">份额(分)</th><th class="num" data-sort="num">位次</th></tr></thead>
+      <tbody>
+        {% for row in result.detail %}
+        <tr>
+          <td class="mono">{{ row.order_id }}</td>
+          <td class="mono">{{ row.touch_id }}</td>
+          <td title="{{ row.channel }}">{{ row.label }}</td>
+          <td class="num">{{ row.gmv_cents }}</td>
+          <td class="num muted">{{ row.position }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

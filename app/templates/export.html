@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}导出{% endblock %}
+{% block heading %}导出{% endblock %}
+{% block content %}
+{% if not manifest %}
+<section class="section"><div class="empty">还没有导出内容。</div></section>
+{% else %}
+<div class="grid-2">
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">运行清单</span>
+      <span class="section__sub">
+        {% if manifest.replayable %}<span class="dot dot--ok"></span>可复算{% else %}<span class="dot dot--bad"></span>摘要不一致{% endif %}
+      </span>
+    </div>
+    <dl class="kv">
+      <dt>run_id</dt><dd>{{ manifest.run_id }}</dd>
+      <dt>复算 run_id</dt><dd>{{ manifest.recomputed_run_id }}</dd>
+      <dt>数据</dt><dd>{{ manifest.dataset }}</dd>
+      <dt>规则版本</dt><dd>{{ manifest.rule_version }}</dd>
+      <dt>开始</dt><dd>{{ manifest.started_at|localfull }}</dd>
+      <dt>结束</dt><dd>{{ manifest.finished_at|localfull }}</dd>
+      <dt>耗时</dt><dd>{{ manifest.elapsed_ms }} ms</dd>
+      <dt>时区</dt><dd>{{ manifest.tz }}</dd>
+    </dl>
+  </section>
+
+  <section class="section">
+    <div class="section__head">
+      <span class="section__title">输入摘要</span>
+      <span class="section__sub">sha256</span>
+    </div>
+    <div class="table-wrap">
+      <table class="t">
+        <thead><tr><th>输入</th><th>sha256</th><th class="num">字节</th></tr></thead>
+        <tbody>
+          {% for name, info in manifest.inputs.items() %}
+          <tr>
+            <td>{{ name }}</td>
+            <td class="mono muted">{{ (info.sha256 or "—")[:16] }}</td>
+            <td class="num">{{ info.bytes if info.bytes is not none else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">下载</span>
+    <span class="section__sub">触点 {{ counts.get('COUNTED', {}).get('n', 0) }} 计入 · {{ counts.get('LATE', {}).get('n', 0) }} 迟到</span>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="/api/export.csv?kind=touch">触点 CSV</a>
+    <a class="btn" href="/api/export.csv?kind=order">订单 CSV</a>
+    <a class="btn" href="/api/export.csv?kind=credit&model=time_decay">份额 CSV</a>
+    <a class="btn" href="/api/export.json">整体 JSON</a>
+    <a class="btn" href="/api/manifest">清单 JSON</a>
+    <a class="btn" href="/api/quarantine.csv">隔离 CSV</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__title">模型合计</span>
+    <span class="section__sub">单位 分</span>
+  </div>
+  <div class="table-wrap">
+    <table class="t" data-sortable>
+      <thead><tr><th>模型</th><th class="num" data-sort="num">合计(分)</th><th class="num" data-sort="num">合计(元)</th></tr></thead>
+      <tbody>
+        {% for code, label in models %}
+        {% set item = stats.model_totals.get(code) %}
+        <tr><td>{{ label }}</td><td class="num">{{ item if item else 0 }}</td><td class="num">{{ (item if item else 0)|money }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
